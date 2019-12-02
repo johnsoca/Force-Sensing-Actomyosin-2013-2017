@@ -1,0 +1,90 @@
+L=1*100; //Pixel length for drawing filaments
+dir=getDirectory("Choose a Directory");
+filestring=File.openAsString(dir+"fil1.txt");
+rows=split(filestring,"\n"); //Number of filaments
+columns=split(rows[0]); //xp,yp,theta, should always be 3 columns
+time=getNumber("How long was sim?",1000);
+
+N=rows.length;
+theta=newArray(N);
+xp=newArray(N);
+xm=newArray(N);
+yp=newArray(N);
+ym=newArray(N);
+xhalf=newArray(N);
+yhalf=newArray(N);
+
+newImage("Simulation","RGB black",800,400,time);
+for (t=0; t<time; t++){
+	firstPart="fil";
+	number=toString(t);
+	fileType=".txt";
+	title=firstPart+number+fileType;
+	filename=dir+title;
+	filestring=File.openAsString(filename);
+	rows=split(filestring,"\n");
+	setBatchMode(true);
+
+	for (i=0; i<N; i++){
+		line=split(rows[i]);
+		xp[i]=((line[0])+2)*100;
+		yp[i]=((line[1])+2)*100;
+		theta[i]=(line[2]);
+		xm[i]=xp[i]-L*cos(theta[i]);
+		ym[i]=yp[i]-L*sin(theta[i]);
+		xhalf[i]=xp[i]-(L/2)*cos(theta[i]);
+		yhalf[i]=yp[i]-(L/2)*sin(theta[i]);
+		newImage(toString(i),"RGB black",400,400,1);
+		setLineWidth(2);
+		setColor(50,0,0);
+		drawLine(xm[i],ym[i],xp[i],yp[i]);
+
+		if (i>0){
+			imageCalculator("Add","0",toString(i));
+			close(toString(i));
+		}
+		
+	}
+
+
+	firstPartM="mot";
+	numberM=toString(t);
+	fileTypeM=".txt";
+	titleM=firstPartM+numberM+fileTypeM;
+	filenameM=dir+titleM;
+	filestringM=File.openAsString(filenameM);
+	rowsM=split(filestringM,"\n"); //Number of attached motors, changes with each time step
+	columnsM=split(rowsM[0]); //x1,y1,x2,y2, should always be 4 columns
+	M=rowsM.length;
+	x1=newArray(M);
+	y1=newArray(M);
+	x2=newArray(M);
+	y2=newArray(M);
+
+	for (j=0; j<M; j++){
+		lineM=split(rowsM[j]); //x1,y1,x2,y2, should always be 4 columns
+
+		x1[j]=((lineM[0])+2)*100;
+		y1[j]=((lineM[1])+2)*100;
+		x2[j]=((lineM[2])+2)*100;
+		y2[j]=((lineM[3])+2)*100;
+
+		newImage("m"+toString(j),"RGB black",400,400,1);
+		setLineWidth(2);
+		setColor(0,50,0);
+		drawLine(x1[j],y1[j],x2[j],y2[j]);
+		if (j>0){
+			imageCalculator("Add","m0","m"+toString(j));
+			close("m"+toString(j));
+		}
+	}
+
+	run("Combine...", "stack1=0 stack2=m0");
+	run("Select All");
+	run("Copy");
+	selectWindow("Simulation");
+	run("Paste");
+	run("Next Slice [>]");
+
+	setBatchMode(false);
+}

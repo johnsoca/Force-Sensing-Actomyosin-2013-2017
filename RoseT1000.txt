@@ -1,0 +1,462 @@
+//
+//	Rose - produces rose diagrams of circular distributions with arbitrary numbers of bins.
+//
+//	081212 - ported to ImageJ from "shotgun" or "bullseye" macros for NIH-Image
+//
+
+var currWedge, currAnn, currAnnWedge;
+
+
+function SelectAll()
+{
+	run("Select All");
+}
+
+function KillROI()
+{
+	run("Select None");
+}
+
+function Copy()
+{
+	run("Copy");
+}
+
+function makeAnnulus(x,y,rinner,router)
+//
+//	makes a single annulus ROI from the center between the radius rinner and radius router
+//
+{
+	setKeyDown("none");
+
+	left = 400 - router;
+	top = 400 - router;
+	makeOval(left, top,2*router, 2*router);
+	roiManager("Add");
+	t1 = roiManager("count")-1;
+
+	left = 400 - rinner;
+	top = 400 - rinner;
+	makeOval(left, top,2*rinner, 2*rinner);
+	roiManager("Add");
+	t2 = roiManager("count")-1;
+	
+	setKeyDown("none");
+	roiManager("Select", t1);
+	setKeyDown("alt");
+	roiManager("Select", t2);
+	setKeyDown("none");
+	roiManager("Add");
+	currAnn = roiManager("count")-1;
+}
+
+function makeWedge(nbins, i)
+//
+//	makes a single sector-wedge ROI from the center to the edge of the image
+//	stores the ROI index into currWedge
+{
+	one = 1.;
+	pi = 4*atan(one);
+	deg2rad = pi/180.;
+	
+	angle = 360/nbins;
+	xwedg = newArray(3);
+	ywedg = newArray(3);
+	
+	xwedg[0] = 400;
+	ywedg[0] = 400;
+	
+	xwedg[1] = 400 + 900.*cos(angle*i*deg2rad);
+	ywedg[1] = 400 + 900.*sin(angle*i*deg2rad);
+	
+	xwedg[2] = 400 + 900.*cos(angle*(i+1)*deg2rad);
+	ywedg[2] = 400.+ 900.*sin(angle*(i+1)*deg2rad);
+	
+	makeSelection("polygon",xwedg, ywedg);
+	roiManager("Add");
+	currWedge = roiManager("count") - 1;
+}
+
+function makeAnnWedge(x,y, rin, rout, bins, ibin)
+{
+
+	makeAnnulus(x,y, rin, rout);
+	makeWedge(bins,ibin);
+
+	setKeyDown("none");
+	roiManager("Select", currAnn);
+	setKeyDown("alt");
+	roiManager("Select", currWedge);
+	setKeyDown("none");
+	roiManager("Add");
+	t1 = roiManager("count")-1;
+
+	setKeyDown("none");
+	roiManager("Select", currAnn);
+	setKeyDown("alt");
+	roiManager("Select", t1);
+	setKeyDown("none");
+	roiManager("Add");
+
+	currAnnWedge = roiManager("count")-1;
+
+
+}
+
+function Rose(circdist, rosename, maxscale, type)
+//	
+//	circdist an array containing the real values of circular distribution in each of the N sectors.
+//	rosename	the filename of where to store the bullseye figure
+//	maxscale	the real value of the maximum scale to use in the figure
+//		<= 1.    uses this scale.
+//		> 1.	then autoscales.
+//	type	the integer indicating what type of data the b"values" are
+//		=	1	 the values are raw numbers so the algorithm "normalizes" them to add upto 1.0 and scales each b"value".
+//		=	2	 the values are already "normalized" so either use the maxscale or calculate a maxscale.
+//	
+//	To change the dimensions of the bull's eye, change the minradius or the maxradius. Minradius is the radius of the inner "hole" and maxradius is the size of the outermost ring.
+//	 
+//	The largest diagram has a maxradius of 400 pixels (because the bin mask is only 800x800).
+//
+{
+	one = 1.;
+	pi = 4*atan(one);
+	deg2rad = pi/180.;
+	
+	circlen = circdist.length;
+	
+
+	newImage(rosename, "8-bit", 800, 800, 1);
+	resultpid = getImageID();
+	
+//	
+//	Select the largest size of the outer ring
+//	
+
+	maxradius = 375;
+
+//	
+//	Select the size of the donut hole.
+//	
+	minradius = 25;
+
+//	
+//	User selects type 1 if pixel data is raw ---> normalize 
+//
+
+	totalpixels = 0;
+	
+	if (type == 1)
+	{
+		for (bin=0;bin<circlen;bin++)
+		{
+			totalpixels= circdist[bin] + totalpixels;
+		}
+		for (bin=0;bin<circlen;bin++)
+		{
+			circdist[bin] = circdist[bin] / totalpixels;
+		}
+	}
+//	
+//	User selects type 2 if supplying normalized data
+//	
+//	if given a scale
+//	
+
+	if (maxscale <= 1.)
+	{
+		maxbin = 0.;
+		for (bin=0;bin<circlen;bin++)
+		{
+			if (circdist[bin] > maxbin) maxbin = circdist[bin];
+		}
+		if (maxbin > maxscale)
+		{
+			showMessage ('There is overflow of ',maxbin,', please increase scale.');
+		}
+		maxbin=maxscale;
+		numaxes= (maxbin/0.1);
+
+	}
+//	
+//		else determine appropriate scale
+//	
+	else
+	{
+//	
+//		first find the largest bin
+//	
+		maxbin = 0.;
+		for (bin=0;bin<circlen;bin++)
+		{
+			if (circdist[bin] > maxbin) maxbin = circdist[bin];
+		}
+//	
+//	calculate the number of axis lines to use
+//	
+		numaxes= floor(maxbin/0.1);
+		if (maxbin > (numaxes*0.1)) numaxes = numaxes + 1;
+
+		maxbin = numaxes*0.1;
+	}
+
+
+//	
+//	scale the bins to the size of maxbin
+//	
+
+	for (bin=0;bin<circlen;bin++)
+	{
+		circdist[bin]= circdist[bin]/maxbin;
+	}
+//	
+//	make the annular sections
+//	
+
+	setForegroundColor(255,255,255);
+
+	for (bin=0;bin<circlen;bin++)
+	{
+
+		fbin = circdist[bin];
+		
+		radius= (maxradius-minradius)*fbin + minradius;
+		
+		if (minradius < radius)
+		{
+			makeAnnWedge(400,400, minradius, radius, circlen, bin);
+			setForegroundColor(0,0,0);
+			setLineWidth(0);
+			fill();
+			run("Draw");
+			
+		}
+
+ 	}
+ 	
+	selectImage(resultpid);
+	setForegroundColor(100,100,100);
+	setLineWidth(2);
+	
+	angle = 360/circlen;
+	
+
+	for (i= 0; i<=numaxes; i++)
+	{
+		fbin = (i)*0.1/maxbin;
+		radius= (maxradius-minradius)*fbin + minradius;
+		left = 400 - radius;
+		top = 400 - radius;
+		drawOval(left, top,2*radius, 2*radius);
+	}
+	for (i=0; i<=circlen; i++)
+	{
+		fbin= numaxes*0.1/maxbin;
+		radius= (maxradius-minradius)*fbin + minradius;
+		x1 = 400+minradius*cos(angle*i*deg2rad);
+		y1 = 400+minradius*sin (angle*i*deg2rad);
+		x2 = 400+radius*cos(angle*i*deg2rad);
+		y2 = 400+radius*sin(angle*i*deg2rad);
+		drawLine(x1,y1, x2, y2);
+	}
+	setForegroundColor(255,255,255);
+
+}
+
+
+
+
+function RoseTimeCourse(circdist, rosename, maxbin)
+//	
+//	circdist an array containing the real values of circular distribution in each of the N sectors.
+//	rosename	the filename of where to store the bullseye figure
+//	maxbin	already determined maximum value to normalize plot
+//	
+//	To change the dimensions of the bull's eye, change the minradius or the maxradius. Minradius is the radius of the inner "hole" and maxradius is the size of the outermost ring.
+//	 
+//	The largest diagram has a maxradius of 400 pixels (because the bin mask is only 800x800).
+//
+{
+	one = 1.;
+	pi = 4*atan(one);
+	deg2rad = pi/180.;
+	
+	circlen = circdist.length;	
+
+	newImage(rosename, "8-bit", 800, 800, 1);
+	resultpid = getImageID();
+	
+//	
+//	Select the largest size of the outer ring
+//	
+
+	maxradius = 375;
+
+//	
+//	Select the size of the donut hole.
+//	
+	minradius = 25;
+
+//	
+//	if given a scale
+//	
+
+
+//	
+//	calculate the number of axis lines to use
+//	
+		numaxes= floor(maxbin/0.1); 
+		//numaxes=10;
+
+		if (maxbin > (numaxes*0.1)) 
+		{
+			numaxes = numaxes + 1;
+		}
+		maxbin = numaxes*0.1;
+
+
+
+
+
+//	
+//	scale the bins to the size of maxbin
+//	
+
+	for (bin=0;bin<circlen;bin++)
+	{
+		circdist[bin]= circdist[bin]/maxbin;
+	}
+//	
+//	make the annular sections
+//	
+
+	setForegroundColor(255,255,255);
+
+	for (bin=0;bin<circlen;bin++)
+	{
+
+		fbin = circdist[bin];
+		
+		radius= (maxradius-minradius)*fbin + minradius;
+
+if (radius<minradius+0.50001)
+{
+radius=minradius+0.50001;
+}
+
+		if (minradius < radius)
+		{
+			makeAnnWedge(400,400, minradius, radius, circlen, bin);
+			setForegroundColor(0,0,0);
+			setLineWidth(0);
+			fill();
+			run("Draw");
+			
+		}
+
+ 	}
+ 	
+	selectImage(resultpid);
+	setForegroundColor(100,100,100);
+	setLineWidth(2);
+	
+	angle = 360/circlen;
+	
+
+	for (i= 0; i<=numaxes; i++)
+	{
+		fbin = (i)*0.1/maxbin;
+		radius= (maxradius-minradius)*fbin + minradius;
+		left = 400 - radius;
+		top = 400 - radius;
+		drawOval(left, top,2*radius, 2*radius);
+	}
+	for (i=0; i<=circlen; i++)
+	{
+		fbin= numaxes*0.1/maxbin;
+		radius= (maxradius-minradius)*fbin + minradius;
+		x1 = 400+minradius*cos(angle*i*deg2rad);
+		y1 = 400+minradius*sin (angle*i*deg2rad);
+		x2 = 400+radius*cos(angle*i*deg2rad);
+		y2 = 400+radius*sin(angle*i*deg2rad);
+		drawLine(x1,y1, x2, y2);
+	}
+	setForegroundColor(255,255,255);
+
+
+}
+
+macro "testrose[5]"
+{
+
+// Reducing number of "bins" for data to 50 from 100
+dir=getDirectory("Choose a directory");
+	filestring=File.openAsString(dir+"Rose1000.txt");
+	rows=split(filestring,"\n");
+	N=rows.length;
+	force = newArray(N);
+data = newArray(N/2);
+
+
+	for (i=0; i<N; i++){
+		line=split(rows[i]);
+		force[i]=(line[2])*10; //10 before
+	}
+// for 50 bins
+count=0;
+for (i=0; i<N; i=i+2){
+data[count]=(force[i]+force[i+1])/2;
+count++;
+}
+
+
+	//Determine the maximum value at T=1000 to scale the rest of the rose diagrams
+	maxbin = 0.;
+		for (i=0;i<data.length;i++)
+		{
+			if (data[i] > maxbin) maxbin = data[i];
+		}
+
+//print("maxbin",maxbin);
+maxbin=0.2713; // For 1 kPa sides 500 Pa top/bottom; USE FOR ALL COMPARISONS
+//maxbin=0.6836;
+
+newImage("RoseTimeCourse","8-bit",800,800,1);
+
+setBatchMode(true);
+
+t=1000;
+{
+force = newArray(N);
+data = newArray(N/2);
+		firstPart="Rose";
+		number=toString(t);
+		fileType=".txt";
+		title=firstPart+number+fileType;
+		filename=dir+title;
+		filestring=File.openAsString(filename);
+		rows=split(filestring,"\n");
+
+		for (i=0; i<N; i++){
+			line=split(rows[i]);
+			force[i]=(line[2])*10;
+		}
+ //for 50 bins
+		count=0;
+		for (i=0; i<N; i=i+2){
+			data[count]=(force[i]+force[i+1])/2;
+			count++;
+		}
+
+		RoseTimeCourse(data,'Test', maxbin);
+
+		selectWindow("Test");
+		run("Select All");
+		run("Copy");
+		selectWindow("RoseTimeCourse");
+		run("Paste");
+		close("Test");
+	}
+setBatchMode(false);
+}
+
